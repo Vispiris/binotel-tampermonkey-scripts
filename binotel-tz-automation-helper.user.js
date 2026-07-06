@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Binotel TZ automation helper
 // @namespace    http://tampermonkey.net/
-// @version      0.5.12
+// @version      0.5.14
 // @description  Мінімальний помічник ТЗ: параметри компанії, внутрішні лінії та групи ВЛ
 // @author       Codex
 // @match        https://panel.binotel.com/*
