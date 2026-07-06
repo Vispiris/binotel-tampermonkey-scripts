@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         Binotel TZ automation helper
+// @name         Binotel TZ automation helper 5.14
 // @namespace    http://tampermonkey.net/
 // @version      0.5.14
 // @description  Мінімальний помічник ТЗ: параметри компанії, внутрішні лінії та групи ВЛ
