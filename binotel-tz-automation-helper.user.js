@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         Binotel TZ automation helper 5.14
+// @name         Binotel TZ automation helper 0.5.17
 // @namespace    http://tampermonkey.net/
-// @version      0.5.15
+// @version      0.5.17
 // @description  Мінімальний помічник ТЗ: параметри компанії, внутрішні лінії та групи ВЛ
 // @author       Codex
 // @match        https://panel.binotel.com/*
@@ -12,6 +12,8 @@
 
 (function () {
   'use strict';
+
+  const SCRIPT_VERSION = '0.5.17';
 
   const CONFIG = {
     panelId: 'binotel-tz-helper-panel',
@@ -638,13 +640,31 @@
     return getBlockItems(value)
       .map(lines => ({
         number: clean(lines[0]),
-        name: clean(lines[1] || lines[0]),
+        name: clean(lines[1] || ''),
       }))
       .filter(item => item.number);
   }
 
+  function getDepartmentBlocks(value) {
+    const blocks = getBlockItems(value);
+    const result = [];
+
+    blocks.forEach(lines => {
+      if (lines.length > 3 && lines.length % 3 === 0) {
+        for (let index = 0; index < lines.length; index += 3) {
+          result.push(lines.slice(index, index + 3));
+        }
+        return;
+      }
+
+      result.push(lines);
+    });
+
+    return result;
+  }
+
   function getDepartmentItems(value) {
-    return getBlockItems(value)
+    return getDepartmentBlocks(value)
       .map(lines => ({
         name: clean(lines[0]),
         phoneNumbers: normalizeLineList(lines[1]),
@@ -1184,7 +1204,9 @@
     if (!setFieldValue(numberField, item.number)) {
       throw new Error(`Не зміг заповнити номер GSM: ${item.number}.`);
     }
-    setFieldValue(nameField, item.name || item.number);
+    if (item.name) {
+      setFieldValue(nameField, item.name);
+    }
     setFieldValue(emailField, clean(draft.gsmEmail) || 'noemail');
 
     if (serverField && serverField.tagName === 'SELECT') {
@@ -1675,7 +1697,7 @@
       panel.id = CONFIG.panelId;
       panel.innerHTML = `
         <div class="bth-head">
-          <span>⚙️ TZ helper</span>
+          <span>⚙️ TZ helper ${SCRIPT_VERSION}</span>
           <button class="bth-toggle" type="button">−</button>
         </div>
         <div class="bth-body">
@@ -1716,7 +1738,7 @@
 
     modal.innerHTML = `
       <div class="bth-modal-head">
-        <h2>TZ helper — мінімальний режим 5.15</h2>
+        <h2>TZ helper — мінімальний режим ${SCRIPT_VERSION}</h2>
         <button class="bth-close" type="button">×</button>
       </div>
       <div class="bth-content">
