@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Binotel TZ automation helper 5.14
 // @namespace    http://tampermonkey.net/
-// @version      0.5.14
+// @version      0.5.15
 // @description  Мінімальний помічник ТЗ: параметри компанії, внутрішні лінії та групи ВЛ
 // @author       Codex
 // @match        https://panel.binotel.com/*
@@ -1716,7 +1716,7 @@
 
     modal.innerHTML = `
       <div class="bth-modal-head">
-        <h2>TZ helper — мінімальний режим</h2>
+        <h2>TZ helper — мінімальний режим 5.15</h2>
         <button class="bth-close" type="button">×</button>
       </div>
       <div class="bth-content">
@@ -1807,7 +1807,7 @@
         <div class="bth-card">
           <h3>Відділи</h3>
           <label>Список відділів</label>
-          <textarea data-field="departmentsRows" placeholder="Продажі-1&#10;0630000000&#10;801&#10;802&#10;&#10;Продажі-2&#10;0630000001&#10;803&#10;804">${escapeHtml(draft.departmentsRows)}</textarea>
+          <textarea data-field="departmentsRows" placeholder="Продажі-1&#10;0630000000&#10;901&#10;902&#10;&#10;Продажі-2&#10;0630000001&#10;903&#10;904">${escapeHtml(draft.departmentsRows)}</textarea>
           <div class="bth-note">
             Кожен відділ — блок: назва, номер, далі ВЛ. Якщо для номера створився тимчасовий — він буде доданий у цей відділ автоматично.
           </div>
