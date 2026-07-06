@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Binotel TZ automation helper
 // @namespace    http://tampermonkey.net/
-// @version      0.5.13
+// @version      0.5.12
 // @description  Мінімальний помічник ТЗ: параметри компанії, внутрішні лінії та групи ВЛ
 // @author       Codex
 // @match        https://panel.binotel.com/*
@@ -647,8 +647,8 @@
     return getBlockItems(value)
       .map(lines => ({
         name: clean(lines[0]),
-        phoneNumber: clean(lines[1]),
-        endpoints: lines.slice(2).map(clean).filter(Boolean),
+        phoneNumbers: normalizeLineList(lines[1]),
+        endpoints: normalizeLineList(lines.slice(2).join(',')),
       }))
       .filter(item => item.name);
   }
@@ -1321,9 +1321,16 @@
     );
 
     const temporaryMap = getTemporaryMap();
+    const phoneTargets = [];
+    (department.phoneNumbers || []).forEach(phoneNumber => {
+      phoneTargets.push(phoneNumber);
+      if (temporaryMap[phoneNumber]) {
+        phoneTargets.push(temporaryMap[phoneNumber]);
+      }
+    });
+
     const targets = [
-      department.phoneNumber,
-      temporaryMap[department.phoneNumber],
+      ...phoneTargets,
       ...department.endpoints,
     ].map(clean).filter(Boolean);
 
@@ -1800,7 +1807,7 @@
         <div class="bth-card">
           <h3>Відділи</h3>
           <label>Список відділів</label>
-          <textarea data-field="departmentsRows" placeholder="Продажі-1&#10;0630000000&#10;901&#10;902&#10;&#10;Продажі-2&#10;0630000001&#10;903&#10;904">${escapeHtml(draft.departmentsRows)}</textarea>
+          <textarea data-field="departmentsRows" placeholder="Продажі-1&#10;0630000000&#10;801&#10;802&#10;&#10;Продажі-2&#10;0630000001&#10;803&#10;804">${escapeHtml(draft.departmentsRows)}</textarea>
           <div class="bth-note">
             Кожен відділ — блок: назва, номер, далі ВЛ. Якщо для номера створився тимчасовий — він буде доданий у цей відділ автоматично.
           </div>
@@ -1817,6 +1824,19 @@
         <button class="bth-gray bth-close-bottom" type="button">Закрити</button>
       </div>
     `;
+
+    const departmentsField = $('[data-field="departmentsRows"]', modal);
+    if (departmentsField) {
+      departmentsField.placeholder = [
+        'Продажі-1',
+        '0630000000, 0730000000',
+        '801, 802',
+        '',
+        'Продажі-2',
+        '0500000000',
+        '803, 804',
+      ].join('\n');
+    }
 
     $('.bth-close', modal).addEventListener('click', closeModal);
     $('.bth-close-bottom', modal).addEventListener('click', closeModal);
