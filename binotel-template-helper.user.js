@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Binotel helper → шаблони номерів
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.5.1
 // @description  Перетягуване меню для pbxNumbersEnhanced: універсальний шаблон, Tele2, Kyivstar Trunk, масове додавання номерів
 // @author       Binotel
 // @match        https://panel.binotel.com/*
