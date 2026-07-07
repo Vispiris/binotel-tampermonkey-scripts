@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Binotel helper → шаблони номерів
 // @namespace    http://tampermonkey.net/
-// @version      1.5.1
+// @version      1.6
 // @description  Перетягуване меню для pbxNumbersEnhanced: універсальний шаблон, Tele2, Kyivstar Trunk, масове додавання номерів
 // @author       Binotel
 // @match        https://panel.binotel.com/*
@@ -1475,7 +1475,7 @@ fromdomain = 213.170.92.166`;
         <div class="bth-kyivstar-options">
           <label>
             <span>PAI / технічний 089</span>
-            <input type="text" class="bth-kyivstar-pai" value="0897202782" placeholder="0897202782">
+            <input type="text" class="bth-kyivstar-pai" value="" placeholder="Наприклад: 0897202782">
           </label>
           <label class="bth-kyivstar-check"><input type="checkbox" class="bth-kyivstar-add-pai" checked> Додати PAI як Tech SIP KS</label>
           <label class="bth-kyivstar-check"><input type="checkbox" class="bth-kyivstar-rdnis" checked> Після SIP увімкнути RDNIS = Да</label>
@@ -1506,7 +1506,6 @@ fromdomain = 213.170.92.166`;
     document.body.appendChild(modal);
 
     $('.bth-kyivstar-example', modal).textContent = KYIVSTAR_EXAMPLE_TEXT;
-    $('.bth-kyivstar-numbers', modal).value = '0674002203';
     $('.bth-kyivstar-close', modal).addEventListener('click', closeKyivstarModal);
     $('.bth-kyivstar-copy-example', modal).addEventListener('click', () => {
       $('.bth-kyivstar-numbers', modal).value = KYIVSTAR_EXAMPLE_TEXT;
