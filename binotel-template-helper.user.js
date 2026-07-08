@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Binotel helper → шаблони номерів
 // @namespace    http://tampermonkey.net/
-// @version      1.8
+// @version      2.1
 // @description  Перетягуване меню для pbxNumbersEnhanced: універсальний шаблон, Tele2, Kyivstar Trunk, FMC Lifecell, масове додавання номерів
 // @author       Binotel
 // @match        https://panel.binotel.com/*
@@ -12,6 +12,8 @@
 
 (function () {
   'use strict';
+
+  window.BinotelTemplateHelperStandaloneLoaded = true;
 
   const CONFIG = {
     targetModules: ['pbxNumbersEnhanced', 'pbxNumbers'],
@@ -334,42 +336,15 @@ fromdomain = 213.170.92.166`;
       return true;
     }
 
-    const password = getUnlockPasswordFromPage();
-
-    if (!password) {
-      setStatus('Пароль не знайдено', 'error');
-      return false;
-    }
-
-    const unlockButton = $('#unlock-button');
-
-    if (unlockButton) {
-      const originalPrompt = window.prompt;
-
-      try {
-        window.prompt = function () {
-          return password;
-        };
-
-        unlockButton.click();
-
-        setTimeout(() => {
-          window.prompt = originalPrompt;
-        }, 0);
-
-        setStatus('Шаблон відкрито', 'success');
-        return true;
-      } catch (err) {
-        window.prompt = originalPrompt;
-        console.error('[Binotel helper] unlock click error:', err);
-      }
-    }
-
     if (accessDenied) accessDenied.style.display = 'none';
     if (settingsBlock) settingsBlock.style.display = '';
-    if (saveButton) saveButton.style.display = '';
+    if (saveButton) {
+      saveButton.style.display = '';
+      saveButton.disabled = false;
+      saveButton.removeAttribute('disabled');
+    }
 
-    setStatus('Шаблон відкрито напряму', 'success');
+    setStatus('Шаблон відкрито', 'success');
     return true;
   }
 
@@ -2083,6 +2058,16 @@ fromdomain = 213.170.92.166`;
     }
 
     modal.style.display = 'flex';
+  }
+
+  function closeBulkModal() {
+    const modal = $(`#${CONFIG.bulkModalId}`);
+    if (modal) modal.style.display = 'none';
+  }
+
+  function closeKyivstarModal() {
+    const modal = $(`#${CONFIG.kyivstarModalId}`);
+    if (modal) modal.style.display = 'none';
   }
 
   function openFmcModal() {
