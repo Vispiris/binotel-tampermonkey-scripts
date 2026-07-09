@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Binotel helper → шаблони номерів
 // @namespace    http://tampermonkey.net/
-// @version      2.3
+// @version      2.4
 // @description  Перетягуване меню для pbxNumbersEnhanced: універсальний шаблон, Universal Builder, Tele2, Kyivstar Trunk, FMC Lifecell, масове додавання номерів
 // @author       Binotel
 // @match        https://panel.binotel.com/*
@@ -1418,14 +1418,7 @@ AH1488SS
   }
 
   async function addOneUniversalBuilderNumberAndSave(entry) {
-    const opened = await openUniversalBuilderAddForm();
-
-    if (!opened) {
-      throw new Error('Починати потрібно зі списку розширених номерів, де видно кнопку "Добавить"');
-    }
-
-    await fillUniversalTemplate(entry);
-    await saveCurrentNumber();
+    await addOneNumberAndSave(entry);
   }
 
   async function openUniversalBuilderTele2EditPage(entry, state) {
@@ -1731,6 +1724,7 @@ AH1488SS
     const updateSipAfter = $('.bth-ub-update-sip', modal).checked;
 
     bulkStopRequested = false;
+    clearBulkState();
     clearUniversalBuilderState();
     clearUniversalBuilderLog();
 
