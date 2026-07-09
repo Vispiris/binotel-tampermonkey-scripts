@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Binotel helper → шаблони номерів
 // @namespace    http://tampermonkey.net/
-// @version      2.1
-// @description  Перетягуване меню для pbxNumbersEnhanced: універсальний шаблон, Tele2, Kyivstar Trunk, FMC Lifecell, масове додавання номерів
+// @version      2.2
+// @description  Перетягуване меню для pbxNumbersEnhanced: універсальний шаблон, Universal Builder, Tele2, Kyivstar Trunk, FMC Lifecell, масове додавання номерів
 // @author       Binotel
 // @match        https://panel.binotel.com/*
 // @updateURL    https://raw.githubusercontent.com/Vispiris/binotel-tampermonkey-scripts/main/binotel-template-helper.user.js
@@ -20,6 +20,7 @@
     tele2Template: 'tele2-trunk-main-gfv20',
     panelId: 'binotel-template-helper-panel',
     bulkModalId: 'binotel-template-helper-bulk-modal',
+    universalBuilderModalId: 'binotel-template-helper-universal-builder-modal',
     kyivstarModalId: 'binotel-template-helper-kyivstar-modal',
     kyivstarOperatorModalSelector: '#operatorKyivstarTrunk',
     fmcModalId: 'binotel-template-helper-fmc-modal',
@@ -28,6 +29,9 @@
     positionStorageKey: 'binotel_template_helper_position_v1',
     bulkStateStorageKey: 'binotel_template_helper_bulk_state_v1',
     bulkActiveStorageKey: 'binotel_template_helper_bulk_active_v1',
+    universalBuilderStateStorageKey: 'binotel_template_helper_universal_builder_state_v1',
+    universalBuilderActiveStorageKey: 'binotel_template_helper_universal_builder_active_v1',
+    universalBuilderLogStorageKey: 'binotel_template_helper_universal_builder_log_v1',
     kyivstarStateStorageKey: 'binotel_template_helper_kyivstar_state_v1',
     kyivstarActiveStorageKey: 'binotel_template_helper_kyivstar_active_v1',
     fmcStateStorageKey: 'binotel_template_helper_fmc_state_v1',
@@ -57,6 +61,25 @@ defaultuser = 00039835
 fromuser = 00039835
 host = 213.170.92.166
 fromdomain = 213.170.92.166`;
+
+  const UNIVERSAL_BUILDER_EXAMPLE_TEXT = `0430000000
+login123
+pass123
+sip.example.com
+
+---
+
+0440000000
+login456
+pass456
+sip.example.com
+proxy: 195.5.0.164
+
+---
+
+0800000000
+0800000000
+79.171.120.4`;
 
   const KYIVSTAR_EXAMPLE_TEXT = `0674002203
 0674002204
@@ -138,6 +161,51 @@ fromdomain = 213.170.92.166`;
   function clearFmcLog() {
     const log = $(`#${CONFIG.fmcModalId} .bth-fmc-log`);
     if (log) log.innerHTML = '';
+  }
+
+  function getUniversalBuilderLogRows() {
+    try {
+      return JSON.parse(localStorage.getItem(CONFIG.universalBuilderLogStorageKey) || '[]');
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function saveUniversalBuilderLogRows(rows) {
+    localStorage.setItem(
+      CONFIG.universalBuilderLogStorageKey,
+      JSON.stringify(rows.slice(-220))
+    );
+  }
+
+  function renderUniversalBuilderLog() {
+    const log = $(`#${CONFIG.universalBuilderModalId} .bth-ub-log`);
+    if (!log) return;
+
+    log.innerHTML = '';
+    getUniversalBuilderLogRows().forEach(item => {
+      const row = document.createElement('div');
+      row.className = `bth-bulk-log-row ${item.type || 'info'}`;
+      row.textContent = item.message || '';
+      log.appendChild(row);
+    });
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function setUniversalBuilderLog(message, type = 'info') {
+    const rows = getUniversalBuilderLogRows();
+    const time = new Date().toLocaleTimeString('uk-UA', { hour12: false });
+    rows.push({
+      type,
+      message: `${time} — ${message}`,
+    });
+    saveUniversalBuilderLogRows(rows);
+    renderUniversalBuilderLog();
+  }
+
+  function clearUniversalBuilderLog() {
+    localStorage.removeItem(CONFIG.universalBuilderLogStorageKey);
+    renderUniversalBuilderLog();
   }
 
   function dispatchFieldEvents(element) {
@@ -459,6 +527,40 @@ fromdomain = 213.170.92.166`;
     sessionStorage.removeItem(CONFIG.bulkActiveStorageKey);
   }
 
+  function getUniversalBuilderState() {
+    try {
+      const raw = localStorage.getItem(CONFIG.universalBuilderStateStorageKey);
+      if (!raw) return null;
+
+      const state = JSON.parse(raw);
+
+      if (!state || !Array.isArray(state.entries) || typeof state.index !== 'number') {
+        return null;
+      }
+
+      return state;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function saveUniversalBuilderState(state) {
+    localStorage.setItem(CONFIG.universalBuilderStateStorageKey, JSON.stringify(state));
+  }
+
+  function setUniversalBuilderActive() {
+    sessionStorage.setItem(CONFIG.universalBuilderActiveStorageKey, '1');
+  }
+
+  function isUniversalBuilderActive() {
+    return sessionStorage.getItem(CONFIG.universalBuilderActiveStorageKey) === '1';
+  }
+
+  function clearUniversalBuilderState() {
+    localStorage.removeItem(CONFIG.universalBuilderStateStorageKey);
+    sessionStorage.removeItem(CONFIG.universalBuilderActiveStorageKey);
+  }
+
   function getKyivstarState() {
     try {
       const raw = localStorage.getItem(CONFIG.kyivstarStateStorageKey);
@@ -593,10 +695,12 @@ fromdomain = 213.170.92.166`;
     button.addEventListener('click', () => {
       bulkStopRequested = true;
       clearBulkState();
+      clearUniversalBuilderState();
       clearKyivstarState();
       clearFmcState();
       setStatus('Масове додавання зупинено', 'warn');
       setBulkLog('Натиснуто аварійний СТОП. Поточна дія може завершитись, але наступний номер не запуститься.', 'warn');
+      setUniversalBuilderLog('Натиснуто аварійний СТОП. Поточна дія може завершитись, але наступний номер не запуститься.', 'warn');
       setKyivstarLog('Натиснуто аварійний СТОП. Поточна дія може завершитись, але наступний номер не запуститься.', 'warn');
       setFmcLog('Натиснуто аварійний СТОП. Поточна дія може завершитись, але наступний крок FMC не запуститься.', 'warn');
       button.textContent = '⛔ ЗУПИНЕНО';
@@ -902,6 +1006,699 @@ fromdomain = 213.170.92.166`;
     setBulkLog('Після кожного "Вставить" скрипт натискатиме "Сохранить" і продовжить список.', 'info');
 
     await processBulkState();
+  }
+
+  function normalizeUniversalBuilderMetaKey(key) {
+    return String(key || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[\s_-]+/g, '');
+  }
+
+  function parseUniversalBuilderMetaLine(line) {
+    const match = String(line || '').match(/^([^:=]+?)\s*[:=]\s*(.*)$/);
+    if (!match) return null;
+
+    const key = normalizeUniversalBuilderMetaKey(match[1]);
+    const value = match[2].trim();
+
+    const aliases = {
+      number: 'number',
+      номер: 'number',
+      login: 'login',
+      логін: 'login',
+      loginuser: 'login',
+      defaultuser: 'login',
+      fromuser: 'fromuser',
+      password: 'password',
+      pass: 'password',
+      пароль: 'password',
+      secret: 'password',
+      server: 'server',
+      сервер: 'server',
+      host: 'server',
+      domain: 'fromdomain',
+      fromdomain: 'fromdomain',
+      proxy: 'proxy',
+      outboundproxy: 'proxy',
+      port: 'port',
+      authlogin: 'authLogin',
+      authuser: 'authLogin',
+      authhost: 'authHost',
+      authserver: 'authHost',
+      auth: 'auth',
+    };
+
+    const normalizedKey = aliases[key];
+    return normalizedKey ? { key: normalizedKey, value } : null;
+  }
+
+  function splitUniversalBuilderBlocks(rawText, template) {
+    const text = String(rawText || '').replace(/\r/g, '').trim();
+    if (!text) return [];
+
+    let blocks = [];
+
+    if (/(^|\n)\s*---\s*(\n|$)/.test(text)) {
+      blocks = text
+        .split(/(?:^|\n)\s*---\s*(?:\n|$)/g)
+        .map(block => block.trim())
+        .filter(Boolean);
+    } else if (/\n\s*\n/.test(text)) {
+      blocks = text
+        .split(/\n\s*\n/g)
+        .map(block => block.trim())
+        .filter(Boolean);
+    } else {
+      const lines = text
+        .split(/\n/g)
+        .map(line => line.trim())
+        .filter(Boolean);
+      const hasMeta = lines.some(line => Boolean(parseUniversalBuilderMetaLine(line)));
+      const chunkSize = template === 'trunk' ? (lines.length % 3 === 0 ? 3 : 4) : 4;
+
+      if (!hasMeta && lines.length > chunkSize && lines.length % chunkSize === 0) {
+        for (let index = 0; index < lines.length; index += chunkSize) {
+          blocks.push(lines.slice(index, index + chunkSize).join('\n'));
+        }
+      } else {
+        blocks = [text];
+      }
+    }
+
+    return blocks;
+  }
+
+  function parseUniversalBuilderAuth(value, target) {
+    const match = String(value || '').trim().match(/^([^:@\s]+)(?::([^@\s]+))?@(.+)$/);
+    if (!match) return;
+
+    if (!target.authLogin) target.authLogin = match[1].trim();
+    if (!target.authHost) target.authHost = match[3].trim();
+  }
+
+  function parseUniversalBuilderBlock(block, index, template) {
+    const lines = String(block || '')
+      .split(/\n/g)
+      .map(line => line.trim())
+      .filter(Boolean);
+
+    const meta = {};
+    const positionals = [];
+
+    lines.forEach(line => {
+      if (/^register\s*=>/i.test(line)) return;
+
+      const metaLine = parseUniversalBuilderMetaLine(line);
+      if (metaLine) {
+        meta[metaLine.key] = metaLine.value;
+        if (metaLine.key === 'auth') parseUniversalBuilderAuth(metaLine.value, meta);
+        return;
+      }
+
+      positionals.push(line);
+    });
+
+    let cursor = 0;
+    const next = () => positionals[cursor++] || '';
+
+    const number = meta.number || next();
+    let login = meta.login || next();
+    let password = meta.password || '';
+    let server = meta.server || '';
+
+    if (!number) {
+      throw new Error(`Блок ${index + 1}: не вказано номер`);
+    }
+
+    if (!login) login = number;
+
+    if (template === 'trunk') {
+      if (!server) {
+        const left = positionals.slice(cursor);
+        if (left.length >= 2) {
+          password = password || left[0];
+          server = left[1];
+        } else {
+          server = left[0] || '';
+        }
+        cursor = positionals.length;
+      }
+    } else {
+      password = password || next();
+      server = server || next();
+    }
+
+    const fromuser = meta.fromuser || (template === 'tele2' ? number : login);
+    const fromdomain = meta.fromdomain || server;
+    const proxy = meta.proxy || '';
+    const port = meta.port || '';
+    const authLogin = meta.authLogin || next();
+    const authHost = meta.authHost || next();
+
+    if (!server) {
+      throw new Error(`Блок ${index + 1} (${number}): не вказано сервер`);
+    }
+
+    if (template !== 'trunk' && !password) {
+      throw new Error(`Блок ${index + 1} (${number}): не вказано пароль`);
+    }
+
+    if (template === 'auth' && (!authLogin || !authHost)) {
+      throw new Error(`Блок ${index + 1} (${number}): для Auth потрібні authLogin і authHost`);
+    }
+
+    return {
+      number,
+      login,
+      fromuser,
+      password,
+      server,
+      fromdomain,
+      proxy,
+      port,
+      authLogin,
+      authHost,
+      template,
+    };
+  }
+
+  function buildUniversalBuilderEntry(record) {
+    const lines = [
+      `defaultuser = ${record.login}`,
+      `fromuser = ${record.fromuser}`,
+    ];
+
+    if (record.template === 'auth') {
+      lines.push(`auth = ${record.authLogin}:${record.password}@${record.authHost}`);
+    }
+
+    if (record.password) {
+      lines.push(`secret = ${record.password}`);
+    }
+
+    lines.push(`host = ${record.server}`);
+    lines.push(`fromdomain = ${record.fromdomain}`);
+
+    if (record.proxy) {
+      lines.push(`outboundproxy = ${record.proxy}`);
+    }
+
+    if (record.port) {
+      lines.push(`port = ${record.port}`);
+    }
+
+    let register = '';
+
+    if (record.template === 'registration') {
+      const hostWithPort = record.port ? `${record.server}:${record.port}` : record.server;
+      register = record.proxy
+        ? `register => ${record.login}@${hostWithPort}:${record.password}:${record.login}@${record.proxy}/${record.number}`
+        : `register => ${record.login}:${record.password}@${hostWithPort}/${record.number}`;
+    }
+
+    if (record.template === 'lifecell') {
+      register = `register => ${record.login}@${record.fromdomain}:${record.password}@${record.server}/${record.number}`;
+    }
+
+    if (record.template === 'auth') {
+      const hostWithPort = record.port ? `${record.server}:${record.port}` : record.server;
+      register = `register => ${record.login}@${hostWithPort}:${record.password}:${record.authLogin}@${record.authHost}/${record.number}`;
+    }
+
+    return {
+      number: record.number,
+      sipData: lines.join('\n'),
+      register,
+      template: record.template,
+      applyTele2: record.template === 'tele2',
+    };
+  }
+
+  function parseUniversalBuilderText(rawText, template) {
+    return splitUniversalBuilderBlocks(rawText, template)
+      .map((block, index) => parseUniversalBuilderBlock(block, index, template))
+      .map(buildUniversalBuilderEntry);
+  }
+
+  function getUniversalBuilderTemplateLabel(template) {
+    const labels = {
+      registration: 'Реєстрація',
+      lifecell: 'Lifecell cloud',
+      auth: 'Auth',
+      trunk: 'Транк',
+      tele2: 'Tele2 trunk',
+    };
+
+    return labels[template] || template;
+  }
+
+  function buildUniversalBuilderPreview(entries) {
+    if (!entries.length) return 'Немає номерів для preview.';
+
+    return entries.map((entry, index) => {
+      const blocks = [
+        `${index + 1}. ${entry.number} — ${getUniversalBuilderTemplateLabel(entry.template)}`,
+        '',
+        'Sip данные:',
+        entry.sipData,
+        '',
+        'Register:',
+        entry.register || '— не використовується',
+      ];
+
+      if (entry.applyTele2) {
+        blocks.push('', 'Після додавання: встановити SIP-шаблон Tele2');
+      }
+
+      return blocks.join('\n');
+    }).join('\n\n------------------------------\n\n');
+  }
+
+  function getUniversalBuilderSelectedTemplate(modal) {
+    const selected = $('.bth-ub-template:checked', modal);
+    return selected ? selected.value : 'registration';
+  }
+
+  function validateUniversalBuilderFromModal() {
+    const modal = $(`#${CONFIG.universalBuilderModalId}`);
+    const textarea = $('.bth-ub-data', modal);
+    const template = getUniversalBuilderSelectedTemplate(modal);
+    return parseUniversalBuilderText(textarea.value, template);
+  }
+
+  function refreshUniversalBuilderPreview() {
+    const modal = $(`#${CONFIG.universalBuilderModalId}`);
+    const preview = $('.bth-ub-preview', modal);
+
+    if (!preview) return [];
+
+    try {
+      const entries = validateUniversalBuilderFromModal();
+      preview.textContent = buildUniversalBuilderPreview(entries);
+      return entries;
+    } catch (err) {
+      preview.textContent = `Помилка: ${err.message}`;
+      return [];
+    }
+  }
+
+  async function openUniversalBuilderAddForm() {
+    if ($('#operatorUniversalTemplate')) return true;
+
+    const readyForAdd = await waitForAddButtonReady(15000);
+    if (!readyForAdd) return false;
+
+    const addButton = findVisibleAddButton();
+    if (!addButton) return false;
+
+    addButton.click();
+    const modal = await waitForElement('#operatorUniversalTemplate', 10000);
+    return Boolean(modal);
+  }
+
+  function markUniversalBuilderEntryDone(state, message) {
+    const completedIndex =
+      typeof state.pendingIndex === 'number'
+        ? state.pendingIndex
+        : state.index;
+
+    const nextState = {
+      ...state,
+      index: completedIndex + 1,
+      phase: 'list',
+      lastNumber: state.entries[completedIndex]
+        ? state.entries[completedIndex].number
+        : state.lastNumber,
+    };
+
+    delete nextState.pendingIndex;
+    saveUniversalBuilderState(nextState);
+
+    if (message) setUniversalBuilderLog(message, 'success');
+    return nextState;
+  }
+
+  async function addOneUniversalBuilderNumberAndSave(entry) {
+    const opened = await openUniversalBuilderAddForm();
+
+    if (!opened) {
+      throw new Error('Починати потрібно зі списку розширених номерів, де видно кнопку "Добавить"');
+    }
+
+    await fillUniversalTemplate(entry);
+    await saveCurrentNumber();
+  }
+
+  async function openUniversalBuilderTele2EditPage(entry, state) {
+    const params = getPanelParams(state);
+
+    if (params.module !== 'pbxNumbersEnhanced' || params.action) {
+      navigateToPanelModule('pbxNumbersEnhanced', state);
+      return false;
+    }
+
+    const ready = await waitForAddButtonReady(15000);
+    if (!ready) return false;
+
+    const href = findPbxNumberEditHref(entry.number);
+    if (!href) {
+      throw new Error(`Не знайшов редагування для ${entry.number}`);
+    }
+
+    saveUniversalBuilderState({
+      ...state,
+      phase: 'tele2Saving',
+    });
+
+    window.location.href = href;
+    return false;
+  }
+
+  async function saveUniversalBuilderTele2Template(entry) {
+    setTele2SipTemplate();
+    await sleep(250);
+    await saveCurrentNumber();
+    await sleep(800);
+
+    if (new URLSearchParams(window.location.search).get('action') === 'edit') {
+      await saveCurrentNumber();
+    }
+  }
+
+  function universalBuilderNormalizeText(value) {
+    return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function universalBuilderIsVisible(element) {
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  }
+
+  function detectUniversalBuilderCurrentSipServer() {
+    const resolveSipCandidate = digits => {
+      const value = String(digits || '').replace(/\D+/g, '');
+      if (!value) return '';
+
+      if ($(`#sip${value}WithSipSysUpdate`)) return value;
+
+      for (let cut = 1; cut <= 2; cut += 1) {
+        const trimmed = value.slice(0, -cut);
+        if (trimmed && $(`#sip${trimmed}WithSipSysUpdate`)) return trimmed;
+      }
+
+      return value;
+    };
+
+    const sipBox = $('.sip-server');
+
+    if (sipBox) {
+      let sipText = normalizeCompact(sipBox.textContent).toUpperCase();
+      const countdown = normalizeCompact(
+        $('#pbx-next-update-countdown')
+          ? $('#pbx-next-update-countdown').textContent
+          : ''
+      );
+
+      if (countdown && sipText.endsWith(countdown)) {
+        sipText = sipText.slice(0, -countdown.length);
+      }
+
+      const sipBoxMatch = sipText.match(/^SIP(\d{1,3})$/i);
+      if (sipBoxMatch) return resolveSipCandidate(sipBoxMatch[1]);
+    }
+
+    const visibleTexts = $all('span, div, td, th, a, b, strong')
+      .filter(universalBuilderIsVisible)
+      .map(element => universalBuilderNormalizeText(element.textContent))
+      .filter(text => /^SIP\s*\d{1,3}$/i.test(text));
+
+    const visibleMatch = visibleTexts
+      .map(text => text.match(/^SIP\s*(\d{1,3})$/i))
+      .find(Boolean);
+
+    if (visibleMatch) return resolveSipCandidate(visibleMatch[1]);
+
+    const bodyMatch = universalBuilderNormalizeText(document.body ? document.body.innerText : '')
+      .match(/\bSIP\s*(\d{1,3})\b/i);
+
+    return bodyMatch ? resolveSipCandidate(bodyMatch[1]) : '';
+  }
+
+  async function clickUniversalBuilderUpdateAnchor(anchor, label) {
+    if (!anchor) throw new Error(`не знайшов пункт оновлення ${label}`);
+
+    const oldAlert = window.alert;
+    const oldPrompt = window.prompt;
+    const oldConfirm = window.confirm;
+
+    window.alert = () => true;
+    window.prompt = () => 'binotel';
+    window.confirm = () => true;
+
+    try {
+      anchor.click();
+      await sleep(6000);
+    } finally {
+      window.alert = oldAlert;
+      window.prompt = oldPrompt;
+      window.confirm = oldConfirm;
+    }
+  }
+
+  async function processUniversalBuilderFinalSipUpdate(state) {
+    const params = getPanelParams(state);
+
+    if (params.module !== 'pbxNumbersEnhanced' || params.action) {
+      navigateToPanelModule('pbxNumbersEnhanced', state);
+      return false;
+    }
+
+    const currentSip = state.sipServer || detectUniversalBuilderCurrentSipServer();
+
+    if (!currentSip) {
+      throw new Error('не бачу поточний SIP сервер у Panel — фінальне оновлення не виконано');
+    }
+
+    const sipAnchor = $(`#sip${currentSip}WithSipSysUpdate`);
+    setUniversalBuilderLog(`фінал: оновлюю SIP${currentSip}`, 'info');
+    await clickUniversalBuilderUpdateAnchor(sipAnchor, `SIP${currentSip}`);
+
+    saveUniversalBuilderState({
+      ...state,
+      phase: 'done',
+      finalUpdateDone: true,
+      sipServer: currentSip,
+    });
+
+    setUniversalBuilderLog(`оновлено SIP${currentSip}`, 'success');
+    return true;
+  }
+
+  async function processUniversalBuilderState() {
+    const state = getUniversalBuilderState();
+
+    if (!state || !isUniversalBuilderActive()) {
+      if (state && !isUniversalBuilderActive()) {
+        clearUniversalBuilderState();
+      }
+      hideEmergencyStopButton();
+      return;
+    }
+
+    showEmergencyStopButton();
+
+    const total = state.entries.length;
+
+    if (bulkStopRequested) {
+      clearUniversalBuilderState();
+      hideEmergencyStopButton();
+      setUniversalBuilderLog('Зупинено користувачем', 'warn');
+      setStatus('Universal Builder зупинено', 'warn');
+      return;
+    }
+
+    if (state.index >= total) {
+      if (state.updateSipAfter && !state.finalUpdateDone) {
+        try {
+          saveUniversalBuilderState({
+            ...state,
+            phase: 'finalUpdate',
+          });
+          setStatus('Universal Builder: оновлюю SIP', 'info');
+          const finalUpdateDone = await processUniversalBuilderFinalSipUpdate(state);
+          if (!finalUpdateDone) return;
+          await sleep(500);
+        } catch (err) {
+          clearUniversalBuilderState();
+          hideEmergencyStopButton();
+          setUniversalBuilderLog(`Фінальне оновлення SIP: ${err.message}`, 'error');
+          setStatus('Помилка оновлення SIP', 'error');
+          return;
+        }
+      }
+
+      clearUniversalBuilderState();
+      hideEmergencyStopButton();
+      setUniversalBuilderLog('Готово. Перевір список номерів у панелі.', 'success');
+      setStatus('Universal Builder завершено', 'success');
+      return;
+    }
+
+    const entry = state.entries[state.pendingIndex ?? state.index];
+
+    try {
+      if (state.phase === 'saving') {
+        const readyAfterSave = await waitForAddButtonReady(15000);
+
+        if (!readyAfterSave) {
+          setUniversalBuilderLog('Чекаю повернення до списку номерів. Якщо сторінка оновиться — продовжу автоматично.', 'warn');
+          setStatus('Чекаю список номерів', 'warn');
+          return;
+        }
+
+        if (entry.applyTele2) {
+          saveUniversalBuilderState({
+            ...state,
+            phase: 'tele2Opening',
+          });
+          await processUniversalBuilderState();
+          return;
+        }
+
+        const nextState = markUniversalBuilderEntryDone(state, `${state.index + 1}/${total}: ${entry.number} — збережено`);
+        await sleep(350);
+        await processUniversalBuilderState(nextState);
+        return;
+      }
+
+      if (state.phase === 'tele2Opening') {
+        setUniversalBuilderLog(`Tele2: відкриваю редагування ${entry.number}`, 'info');
+        await openUniversalBuilderTele2EditPage(entry, state);
+        return;
+      }
+
+      if (state.phase === 'tele2Saving') {
+        const params = getPanelParams(state);
+
+        if (params.action !== 'edit') {
+          setUniversalBuilderLog('Чекаю сторінку редагування Tele2.', 'warn');
+          return;
+        }
+
+        setUniversalBuilderLog(`Tele2: ставлю шаблон для ${entry.number}`, 'info');
+        await saveUniversalBuilderTele2Template(entry);
+
+        const readyAfterTele2 = await waitForAddButtonReady(15000);
+
+        if (!readyAfterTele2) {
+          setUniversalBuilderLog('Tele2 збережено, чекаю повернення до списку номерів.', 'warn');
+          return;
+        }
+
+        const nextState = markUniversalBuilderEntryDone(state, `${state.index + 1}/${total}: ${entry.number} — збережено з Tele2`);
+        await sleep(350);
+        await processUniversalBuilderState(nextState);
+        return;
+      }
+
+      setUniversalBuilderLog(`${state.index + 1}/${total}: додаю ${entry.number}`, 'info');
+      setStatus(`Universal Builder: ${state.index + 1}/${total}`, 'info');
+
+      saveUniversalBuilderState({
+        ...state,
+        phase: 'saving',
+        pendingIndex: state.index,
+      });
+
+      await addOneUniversalBuilderNumberAndSave(entry);
+
+      const latestState = getUniversalBuilderState();
+      const readyForNext = await waitForAddButtonReady(15000);
+
+      if (!readyForNext) {
+        setUniversalBuilderLog('Чекаю повернення до списку номерів. Якщо сторінка оновиться — продовжу автоматично.', 'warn');
+        setStatus('Чекаю список номерів', 'warn');
+        return;
+      }
+
+      if (entry.applyTele2) {
+        saveUniversalBuilderState({
+          ...(latestState || state),
+          phase: 'tele2Opening',
+        });
+        await processUniversalBuilderState();
+        return;
+      }
+
+      const nextState = markUniversalBuilderEntryDone(latestState || state, `${state.index + 1}/${total}: ${entry.number} — збережено`);
+      await sleep(350);
+      await processUniversalBuilderState(nextState);
+    } catch (err) {
+      clearUniversalBuilderState();
+      hideEmergencyStopButton();
+      setUniversalBuilderLog(`${state.index + 1}/${total}: ${entry.number} — ${err.message}`, 'error');
+      setStatus(`Помилка на ${entry.number}`, 'error');
+    }
+  }
+
+  async function runUniversalBuilderAdd() {
+    const modal = $(`#${CONFIG.universalBuilderModalId}`);
+    const textarea = $('.bth-ub-data', modal);
+    const template = getUniversalBuilderSelectedTemplate(modal);
+    const updateSipAfter = $('.bth-ub-update-sip', modal).checked;
+
+    bulkStopRequested = false;
+    clearUniversalBuilderState();
+    clearUniversalBuilderLog();
+
+    if (!findVisibleAddButton()) {
+      setUniversalBuilderLog('Стартуй зі сторінки списку розширених номерів, де видно кнопку "Добавить".', 'error');
+      setStatus('Потрібна сторінка списку', 'error');
+      return;
+    }
+
+    let entries = [];
+
+    try {
+      entries = parseUniversalBuilderText(textarea.value, template);
+      $('.bth-ub-preview', modal).textContent = buildUniversalBuilderPreview(entries);
+    } catch (err) {
+      setUniversalBuilderLog(`Помилка формату: ${err.message}`, 'error');
+      setStatus('Помилка формату Universal Builder', 'error');
+      return;
+    }
+
+    if (!entries.length) {
+      setUniversalBuilderLog('Немає номерів для додавання', 'warn');
+      return;
+    }
+
+    const params = getPanelParams();
+
+    saveUniversalBuilderState({
+      startedAt: new Date().toISOString(),
+      index: 0,
+      phase: 'list',
+      entries,
+      updateSipAfter,
+      companyID: params.companyID,
+      showProjectID: params.showProjectID,
+    });
+
+    setUniversalBuilderActive();
+    showEmergencyStopButton();
+
+    setUniversalBuilderLog(`Шаблон: ${getUniversalBuilderTemplateLabel(template)}`, 'info');
+    setUniversalBuilderLog(`Знайдено номерів: ${entries.length}`, 'info');
+    setUniversalBuilderLog('Після кожного "Вставить" скрипт натискатиме "Сохранить" і продовжить список.', 'info');
+
+    if (updateSipAfter) {
+      setUniversalBuilderLog('Після всіх номерів буде оновлено поточний SIP компанії.', 'warn');
+    }
+
+    await processUniversalBuilderState();
   }
 
   function parseKyivstarNumbers(rawText) {
@@ -2050,6 +2847,18 @@ fromdomain = 213.170.92.166`;
     modal.style.display = 'flex';
   }
 
+  function openUniversalBuilderModal() {
+    let modal = $(`#${CONFIG.universalBuilderModalId}`);
+
+    if (!modal) {
+      modal = createUniversalBuilderModal();
+    }
+
+    renderUniversalBuilderLog();
+    refreshUniversalBuilderPreview();
+    modal.style.display = 'flex';
+  }
+
   function openKyivstarModal() {
     let modal = $(`#${CONFIG.kyivstarModalId}`);
 
@@ -2062,6 +2871,11 @@ fromdomain = 213.170.92.166`;
 
   function closeBulkModal() {
     const modal = $(`#${CONFIG.bulkModalId}`);
+    if (modal) modal.style.display = 'none';
+  }
+
+  function closeUniversalBuilderModal() {
+    const modal = $(`#${CONFIG.universalBuilderModalId}`);
     if (modal) modal.style.display = 'none';
   }
 
@@ -2148,6 +2962,97 @@ fromdomain = 213.170.92.166`;
     });
     $('.bth-bulk-clear', modal).addEventListener('click', clearBulkLog);
 
+    return modal;
+  }
+
+  function createUniversalBuilderModal() {
+    const modal = document.createElement('div');
+    modal.id = CONFIG.universalBuilderModalId;
+
+    modal.innerHTML = `
+      <div class="bth-ub-window">
+        <div class="bth-ub-header">
+          <div>
+            <div class="bth-ub-title">Universal Builder</div>
+            <div class="bth-ub-subtitle">Номер → логін → пароль → сервер. Додатково: proxy / port / auth / fromdomain.</div>
+          </div>
+          <button type="button" class="bth-ub-close">×</button>
+        </div>
+
+        <div class="bth-ub-body">
+          <div class="bth-ub-left">
+            <div class="bth-ub-card">
+              <div class="bth-ub-label">Шаблон для пачки</div>
+              <div class="bth-ub-template-grid">
+                <label><input type="radio" name="bth-ub-template" class="bth-ub-template" value="registration" checked> Реєстрація</label>
+                <label><input type="radio" name="bth-ub-template" class="bth-ub-template" value="lifecell"> Lifecell cloud</label>
+                <label><input type="radio" name="bth-ub-template" class="bth-ub-template" value="auth"> Auth</label>
+                <label><input type="radio" name="bth-ub-template" class="bth-ub-template" value="trunk"> Транк</label>
+                <label><input type="radio" name="bth-ub-template" class="bth-ub-template" value="tele2"> Tele2 trunk</label>
+              </div>
+              <label class="bth-ub-check"><input type="checkbox" class="bth-ub-update-sip"> В кінці оновити поточний SIP компанії</label>
+            </div>
+
+            <div class="bth-ub-card bth-ub-data-card">
+              <div class="bth-ub-label">Дані</div>
+              <textarea class="bth-ub-data" spellcheck="false" placeholder="0430000000&#10;login123&#10;pass123&#10;sip.example.com&#10;&#10;---&#10;&#10;0440000000&#10;login456&#10;pass456&#10;sip.example.com&#10;proxy: 195.5.0.164"></textarea>
+              <div class="bth-ub-hint">
+                Базово: номер, логін, пароль, сервер. Для транка можна: номер, логін, сервер.
+                Додаткові рядки: proxy:, port:, authLogin:, authHost:, fromdomain:.
+              </div>
+            </div>
+          </div>
+
+          <div class="bth-ub-right">
+            <div class="bth-ub-card">
+              <div class="bth-ub-label">Preview</div>
+              <pre class="bth-ub-preview"></pre>
+              <button type="button" class="bth-ub-copy-example">Показати приклад</button>
+            </div>
+
+            <div class="bth-ub-card">
+              <div class="bth-ub-label">Лог</div>
+              <div class="bth-ub-log"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="bth-ub-actions">
+          <button type="button" class="bth-ub-check-btn">Перевірити</button>
+          <button type="button" class="bth-ub-start">Старт</button>
+          <button type="button" class="bth-ub-stop">Стоп</button>
+          <button type="button" class="bth-ub-clear">Очистити лог</button>
+          <button type="button" class="bth-ub-close-bottom">Закрити</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    $('.bth-ub-close', modal).addEventListener('click', closeUniversalBuilderModal);
+    $('.bth-ub-close-bottom', modal).addEventListener('click', closeUniversalBuilderModal);
+    $('.bth-ub-copy-example', modal).addEventListener('click', () => {
+      $('.bth-ub-data', modal).value = UNIVERSAL_BUILDER_EXAMPLE_TEXT;
+      refreshUniversalBuilderPreview();
+    });
+    $('.bth-ub-check-btn', modal).addEventListener('click', () => {
+      const entries = refreshUniversalBuilderPreview();
+      setUniversalBuilderLog(`Перевірено: ${entries.length} номерів`, entries.length ? 'success' : 'warn');
+    });
+    $('.bth-ub-start', modal).addEventListener('click', runUniversalBuilderAdd);
+    $('.bth-ub-stop', modal).addEventListener('click', () => {
+      bulkStopRequested = true;
+      clearUniversalBuilderState();
+      hideEmergencyStopButton();
+      setUniversalBuilderLog('Очікую завершення поточної дії і зупиняюся...', 'warn');
+    });
+    $('.bth-ub-clear', modal).addEventListener('click', clearUniversalBuilderLog);
+    $all('.bth-ub-template', modal).forEach(input => {
+      input.addEventListener('change', refreshUniversalBuilderPreview);
+    });
+    $('.bth-ub-data', modal).addEventListener('input', refreshUniversalBuilderPreview);
+
+    renderUniversalBuilderLog();
     return modal;
   }
 
@@ -2454,6 +3359,10 @@ fromdomain = 213.170.92.166`;
           📦 Масове додавання
         </button>
 
+        <button type="button" class="bth-btn bth-open-universal-builder">
+          🧩 Universal Builder
+        </button>
+
         <button type="button" class="bth-btn bth-open-kyivstar">
           ⭐ Kyivstar Trunk
         </button>
@@ -2545,6 +3454,14 @@ fromdomain = 213.170.92.166`;
 
       #${CONFIG.panelId} .bth-open-bulk:hover {
         background: #7e22ce;
+      }
+
+      #${CONFIG.panelId} .bth-open-universal-builder {
+        background: #4f46e5;
+      }
+
+      #${CONFIG.panelId} .bth-open-universal-builder:hover {
+        background: #4338ca;
       }
 
       #${CONFIG.panelId} .bth-open-kyivstar {
@@ -2773,6 +3690,185 @@ fromdomain = 213.170.92.166`;
 
       #${CONFIG.bulkModalId} .bth-bulk-log-row.info {
         color: #334155;
+      }
+
+      #${CONFIG.universalBuilderModalId} {
+        position: fixed;
+        inset: 0;
+        z-index: 1000000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(15, 23, 42, 0.45);
+        font-family: Arial, sans-serif;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-window {
+        width: min(1180px, calc(100vw - 44px));
+        max-height: calc(100vh - 44px);
+        overflow: auto;
+        background: #ffffff;
+        color: #111827;
+        border-radius: 12px;
+        box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-header {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 15px 18px 12px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-title {
+        font-size: 22px;
+        font-weight: 900;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-subtitle {
+        margin-top: 4px;
+        color: #64748b;
+        font-size: 12px;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-close {
+        border: none;
+        background: transparent;
+        font-size: 30px;
+        line-height: 1;
+        cursor: pointer;
+        color: #6b7280;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-body {
+        display: grid;
+        grid-template-columns: minmax(420px, 0.95fr) minmax(420px, 1.05fr);
+        gap: 14px;
+        padding: 14px 18px 10px;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 10px;
+        background: #ffffff;
+        padding: 12px;
+        margin-bottom: 12px;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-label {
+        margin-bottom: 8px;
+        font-weight: 800;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-template-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(160px, 1fr));
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-template-grid label,
+      #${CONFIG.universalBuilderModalId} .bth-ub-check {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        font-size: 13px;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-data {
+        width: 100%;
+        min-height: 360px;
+        resize: vertical;
+        padding: 10px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-family: Consolas, monospace;
+        font-size: 13px;
+        line-height: 1.45;
+        box-sizing: border-box;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-hint {
+        margin-top: 8px;
+        padding: 9px 10px;
+        border-radius: 8px;
+        background: #eff6ff;
+        color: #1e40af;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-preview,
+      #${CONFIG.universalBuilderModalId} .bth-ub-log {
+        margin: 0;
+        min-height: 210px;
+        max-height: 315px;
+        overflow: auto;
+        padding: 10px;
+        border-radius: 8px;
+        background: #0f172a;
+        color: #dbeafe;
+        border: 1px solid #1e293b;
+        font-family: Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.45;
+        white-space: pre-wrap;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-log {
+        min-height: 175px;
+        max-height: 240px;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-copy-example {
+        margin-top: 8px;
+        border: none;
+        border-radius: 7px;
+        padding: 8px 10px;
+        background: #475569;
+        color: #ffffff;
+        cursor: pointer;
+        font-weight: 700;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-actions {
+        display: flex;
+        gap: 8px;
+        padding: 0 18px 16px;
+        flex-wrap: wrap;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-actions button {
+        border: none;
+        border-radius: 7px;
+        padding: 9px 14px;
+        color: #ffffff;
+        font-weight: 800;
+        cursor: pointer;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-check-btn {
+        background: #2563eb;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-start {
+        background: #16a34a;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-stop {
+        background: #dc2626;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-clear,
+      #${CONFIG.universalBuilderModalId} .bth-ub-close-bottom {
+        background: #64748b;
+      }
+
+      @media (max-width: 980px) {
+        #${CONFIG.universalBuilderModalId} .bth-ub-body {
+          grid-template-columns: 1fr;
+        }
       }
 
       #${CONFIG.kyivstarModalId} {
@@ -3140,6 +4236,7 @@ fromdomain = 213.170.92.166`;
     panel.querySelector('.bth-open-universal').addEventListener('click', openUniversalTemplate);
     panel.querySelector('.bth-set-tele2').addEventListener('click', setTele2SipTemplate);
     panel.querySelector('.bth-open-bulk').addEventListener('click', openBulkModal);
+    panel.querySelector('.bth-open-universal-builder').addEventListener('click', openUniversalBuilderModal);
     panel.querySelector('.bth-open-kyivstar').addEventListener('click', openKyivstarModal);
     panel.querySelector('.bth-open-fmc').addEventListener('click', openFmcModal);
 
@@ -3172,6 +4269,26 @@ fromdomain = 213.170.92.166`;
       setTimeout(processBulkState, 700);
     } else if (pendingBulkState && !isBulkActive()) {
       clearBulkState();
+      hideEmergencyStopButton();
+    }
+
+    const pendingUniversalBuilderState = getUniversalBuilderState();
+    if (
+      pendingUniversalBuilderState &&
+      isUniversalBuilderActive() &&
+      (
+        pendingUniversalBuilderState.index < pendingUniversalBuilderState.entries.length ||
+        pendingUniversalBuilderState.updateSipAfter
+      )
+    ) {
+      showEmergencyStopButton();
+      setStatus(
+        `Продовжую Universal Builder: ${Math.min(pendingUniversalBuilderState.index + 1, pendingUniversalBuilderState.entries.length)}/${pendingUniversalBuilderState.entries.length}`,
+        'info'
+      );
+      setTimeout(processUniversalBuilderState, 700);
+    } else if (pendingUniversalBuilderState && !isUniversalBuilderActive()) {
+      clearUniversalBuilderState();
       hideEmergencyStopButton();
     }
 
