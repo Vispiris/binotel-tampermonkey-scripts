@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Binotel helper → шаблони номерів
 // @namespace    http://tampermonkey.net/
-// @version      2.2
+// @version      2.3
 // @description  Перетягуване меню для pbxNumbersEnhanced: універсальний шаблон, Universal Builder, Tele2, Kyivstar Trunk, FMC Lifecell, масове додавання номерів
 // @author       Binotel
 // @match        https://panel.binotel.com/*
@@ -62,7 +62,8 @@ fromuser = 00039835
 host = 213.170.92.166
 fromdomain = 213.170.92.166`;
 
-  const UNIVERSAL_BUILDER_EXAMPLE_TEXT = `0430000000
+  const UNIVERSAL_BUILDER_EXAMPLES = {
+    registration: `0430000000
 login123
 pass123
 sip.example.com
@@ -77,9 +78,37 @@ proxy: 195.5.0.164
 
 ---
 
+0440000001
+login789
+pass789
+sip.example.com
+port: 5069`,
+    lifecell: `0730000000
+0730000000
+password123
+vsbc1.ipvpbx.lifecell.ua
+kairos.ipvpbx.lifecell.ua
+
+---
+
+0730000001
+0730000001
+password456
+kairos2.ipvpbx.lifecell.ua`,
+    auth: `0480000000
+380480000000
+password123
+vg5.vegatele.com
+authLogin: 8000000ABC
+authHost: vegatelecom`,
+    trunk: `0800000000
 0800000000
-0800000000
-79.171.120.4`;
+79.171.120.4`,
+    tele2: `774000000000
+SS1488
+AH1488SS
+217.76.78.7`,
+  };
 
   const KYIVSTAR_EXAMPLE_TEXT = `0674002203
 0674002204
@@ -1075,7 +1104,15 @@ proxy: 195.5.0.164
         .map(line => line.trim())
         .filter(Boolean);
       const hasMeta = lines.some(line => Boolean(parseUniversalBuilderMetaLine(line)));
-      const chunkSize = template === 'trunk' ? (lines.length % 3 === 0 ? 3 : 4) : 4;
+      let chunkSize = 4;
+
+      if (template === 'trunk') {
+        chunkSize = lines.length % 3 === 0 ? 3 : 4;
+      } else if (template === 'lifecell') {
+        chunkSize = lines.length % 5 === 0 ? 5 : 4;
+      } else if (template === 'auth') {
+        chunkSize = lines.length % 6 === 0 ? 6 : 4;
+      }
 
       if (!hasMeta && lines.length > chunkSize && lines.length % chunkSize === 0) {
         for (let index = 0; index < lines.length; index += chunkSize) {
@@ -1097,7 +1134,7 @@ proxy: 195.5.0.164
     if (!target.authHost) target.authHost = match[3].trim();
   }
 
-  function parseUniversalBuilderBlock(block, index, template) {
+  function parseUniversalBuilderBlock(block, index, template, context = {}) {
     const lines = String(block || '')
       .split(/\n/g)
       .map(line => line.trim())
@@ -1144,6 +1181,25 @@ proxy: 195.5.0.164
         }
         cursor = positionals.length;
       }
+    } else if (template === 'lifecell') {
+      password = password || next();
+
+      const hostCandidate = server || next();
+      const fromdomainCandidate = meta.fromdomain || next();
+
+      if (hostCandidate && fromdomainCandidate) {
+        server = hostCandidate;
+      } else if (!server && context.lastLifecellHost && hostCandidate) {
+        server = context.lastLifecellHost;
+      } else {
+        server = hostCandidate;
+      }
+
+      meta.fromdomain = meta.fromdomain || fromdomainCandidate || (
+        context.lastLifecellHost && hostCandidate && hostCandidate !== server
+          ? hostCandidate
+          : ''
+      );
     } else {
       password = password || next();
       server = server || next();
@@ -1236,9 +1292,21 @@ proxy: 195.5.0.164
   }
 
   function parseUniversalBuilderText(rawText, template) {
-    return splitUniversalBuilderBlocks(rawText, template)
-      .map((block, index) => parseUniversalBuilderBlock(block, index, template))
-      .map(buildUniversalBuilderEntry);
+    const context = {};
+    const records = [];
+
+    splitUniversalBuilderBlocks(rawText, template)
+      .forEach((block, index) => {
+        const record = parseUniversalBuilderBlock(block, index, template, context);
+
+        if (template === 'lifecell' && record.server) {
+          context.lastLifecellHost = record.server;
+        }
+
+        records.push(record);
+      });
+
+    return records.map(buildUniversalBuilderEntry);
   }
 
   function getUniversalBuilderTemplateLabel(template) {
@@ -1301,6 +1369,16 @@ proxy: 195.5.0.164
       preview.textContent = `Помилка: ${err.message}`;
       return [];
     }
+  }
+
+  function refreshUniversalBuilderFormatExample() {
+    const modal = $(`#${CONFIG.universalBuilderModalId}`);
+    const example = $('.bth-ub-format-example', modal);
+
+    if (!example) return;
+
+    const template = getUniversalBuilderSelectedTemplate(modal);
+    example.textContent = UNIVERSAL_BUILDER_EXAMPLES[template] || '';
   }
 
   async function openUniversalBuilderAddForm() {
@@ -1553,8 +1631,9 @@ proxy: 195.5.0.164
         const readyAfterSave = await waitForAddButtonReady(15000);
 
         if (!readyAfterSave) {
-          setUniversalBuilderLog('Чекаю повернення до списку номерів. Якщо сторінка оновиться — продовжу автоматично.', 'warn');
-          setStatus('Чекаю список номерів', 'warn');
+          setUniversalBuilderLog('Panel не повернувся до списку — відкриваю список розширених номерів і продовжу.', 'warn');
+          setStatus('Повертаюсь до списку номерів', 'warn');
+          navigateToPanelModule('pbxNumbersEnhanced', state);
           return;
         }
 
@@ -1593,7 +1672,8 @@ proxy: 195.5.0.164
         const readyAfterTele2 = await waitForAddButtonReady(15000);
 
         if (!readyAfterTele2) {
-          setUniversalBuilderLog('Tele2 збережено, чекаю повернення до списку номерів.', 'warn');
+          setUniversalBuilderLog('Tele2 збережено, повертаюсь до списку номерів.', 'warn');
+          navigateToPanelModule('pbxNumbersEnhanced', state);
           return;
         }
 
@@ -1618,8 +1698,9 @@ proxy: 195.5.0.164
       const readyForNext = await waitForAddButtonReady(15000);
 
       if (!readyForNext) {
-        setUniversalBuilderLog('Чекаю повернення до списку номерів. Якщо сторінка оновиться — продовжу автоматично.', 'warn');
-        setStatus('Чекаю список номерів', 'warn');
+        setUniversalBuilderLog('Panel не повернувся до списку — відкриваю список розширених номерів і продовжу.', 'warn');
+        setStatus('Повертаюсь до списку номерів', 'warn');
+        navigateToPanelModule('pbxNumbersEnhanced', latestState || state);
         return;
       }
 
@@ -3000,6 +3081,8 @@ proxy: 195.5.0.164
                 Базово: номер, логін, пароль, сервер. Для транка можна: номер, логін, сервер.
                 Додаткові рядки: proxy:, port:, authLogin:, authHost:, fromdomain:.
               </div>
+              <div class="bth-ub-label bth-ub-format-title">Приклад для вибраного шаблону</div>
+              <pre class="bth-ub-format-example"></pre>
             </div>
           </div>
 
@@ -3007,7 +3090,7 @@ proxy: 195.5.0.164
             <div class="bth-ub-card">
               <div class="bth-ub-label">Preview</div>
               <pre class="bth-ub-preview"></pre>
-              <button type="button" class="bth-ub-copy-example">Показати приклад</button>
+              <button type="button" class="bth-ub-copy-example">Вставити приклад у поле</button>
             </div>
 
             <div class="bth-ub-card">
@@ -3032,7 +3115,8 @@ proxy: 195.5.0.164
     $('.bth-ub-close', modal).addEventListener('click', closeUniversalBuilderModal);
     $('.bth-ub-close-bottom', modal).addEventListener('click', closeUniversalBuilderModal);
     $('.bth-ub-copy-example', modal).addEventListener('click', () => {
-      $('.bth-ub-data', modal).value = UNIVERSAL_BUILDER_EXAMPLE_TEXT;
+      const template = getUniversalBuilderSelectedTemplate(modal);
+      $('.bth-ub-data', modal).value = UNIVERSAL_BUILDER_EXAMPLES[template] || '';
       refreshUniversalBuilderPreview();
     });
     $('.bth-ub-check-btn', modal).addEventListener('click', () => {
@@ -3048,10 +3132,14 @@ proxy: 195.5.0.164
     });
     $('.bth-ub-clear', modal).addEventListener('click', clearUniversalBuilderLog);
     $all('.bth-ub-template', modal).forEach(input => {
-      input.addEventListener('change', refreshUniversalBuilderPreview);
+      input.addEventListener('change', () => {
+        refreshUniversalBuilderFormatExample();
+        refreshUniversalBuilderPreview();
+      });
     });
     $('.bth-ub-data', modal).addEventListener('input', refreshUniversalBuilderPreview);
 
+    refreshUniversalBuilderFormatExample();
     renderUniversalBuilderLog();
     return modal;
   }
@@ -3797,6 +3885,27 @@ proxy: 195.5.0.164
         color: #1e40af;
         font-size: 12px;
         line-height: 1.35;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-format-title {
+        margin-top: 12px;
+        margin-bottom: 6px;
+        font-size: 12px;
+      }
+
+      #${CONFIG.universalBuilderModalId} .bth-ub-format-example {
+        margin: 0;
+        max-height: 155px;
+        overflow: auto;
+        padding: 9px 10px;
+        border-radius: 8px;
+        background: #0f172a;
+        color: #dbeafe;
+        border: 1px solid #1e293b;
+        font-family: Consolas, monospace;
+        font-size: 12px;
+        line-height: 1.4;
+        white-space: pre-wrap;
       }
 
       #${CONFIG.universalBuilderModalId} .bth-ub-preview,
