@@ -1,0 +1,17 @@
+﻿{
+    "schemaVersion":  1,
+    "appName":  "DXD",
+    "contentVersion":  "2026.07.15.234612",
+    "updatedAt":  "2026-07-15",
+    "exportedAt":  "2026-07-15T20:46:13.1037328Z",
+    "source":  "DXD admin export",
+    "entry":  "articles.index.json",
+    "articlesCount":  27,
+    "files":  {
+                  "index":  "articles.index.json",
+                  "manifest":  "manifest.json",
+                  "articles":  "articles/",
+                  "assets":  "assets/",
+                  "assetsManifest":  "assets-manifest.json"
+              }
+}
